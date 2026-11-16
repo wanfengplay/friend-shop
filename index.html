@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>好友集市</title>
-  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <!-- 登录 / 注册 -->
@@ -21,8 +21,8 @@
 
       <!-- 登录表单 -->
       <form id="form-login" class="auth-form">
-        <label data-i18n="username">用户名</label>
-        <input id="login-username" type="text" autocomplete="username" placeholder="用户名">
+        <label data-i18n="email">邮箱</label>
+        <input id="login-email" type="email" autocomplete="email" placeholder="you@example.com">
         <label data-i18n="password">密码</label>
         <input id="login-password" type="password" autocomplete="current-password" placeholder="密码">
         <button type="submit" class="btn btn-primary btn-block" data-i18n="login">登录</button>
@@ -31,10 +31,10 @@
       <!-- 注册表单 -->
       <form id="form-register" class="auth-form hidden">
         <label data-i18n="nickname">昵称</label>
-        <input id="reg-nickname" type="text" placeholder="例如：宝宝 / 亲爱的">
-        <label data-i18n="username">用户名（登录用）</label>
-        <input id="reg-username" type="text" autocomplete="username" placeholder="字母或数字">
-        <label data-i18n="password">密码（至少 4 位）</label>
+        <input id="reg-nickname" type="text" maxlength="20" placeholder="例如：宝宝 / 亲爱的">
+        <label data-i18n="email">邮箱</label>
+        <input id="reg-email" type="email" autocomplete="email" placeholder="you@example.com">
+        <label data-i18n="password">密码（至少 6 位）</label>
         <input id="reg-password" type="password" autocomplete="new-password" placeholder="密码">
         <button type="submit" class="btn btn-primary btn-block" data-i18n="register">注册</button>
       </form>
@@ -153,6 +153,8 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

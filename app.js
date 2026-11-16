@@ -1,4 +1,4 @@
-// 好友集市 前端逻辑
+// 好友集市（Buddy Shop）前端逻辑 —— 数据存 Supabase
 (function () {
   'use strict';
 
@@ -10,10 +10,9 @@
       login: '登录',
       register: '注册',
       logout: '退出',
-      username: '用户名（登录用）',
+      email: '邮箱',
       password: '密码',
       nickname: '昵称',
-      username_login: '用户名',
       market: '市场',
       sell: '上架',
       orders: '订单',
@@ -57,28 +56,28 @@
       order_paid: '已付款',
       order_completed: '已完成',
       order_cancelled: '已取消',
-      registered_bonus: '注册赠送',
-      gift_to: '转赠给',
-      gift_from: '收到',
-      sell_gain: '卖出「',
-      buy_spend: '购买「',
       confirm_buy: '确定要购买「{title}」吗？',
       confirm_delete: '确定删除「{title}」吗？',
+      check_email: '注册成功！请去邮箱点击确认链接，然后回来登录。',
+      login_first: '请先登录',
+      published: '上架成功！',
+      purchased: '购买成功！',
+      gifted: '转赠成功！',
+      deleted: '已删除',
+      done: '操作成功',
       // 错误
-      AUTH_REQUIRED: '请先登录',
-      INVALID_CREDENTIALS: '用户名或密码错误',
-      USERNAME_TAKEN: '该用户名已被占用',
-      INVALID_INPUT: '请检查填写内容',
-      NOT_FOUND: '不存在',
-      FORBIDDEN: '没有权限',
       INSUFFICIENT_POINTS: '积分不足',
       CANT_BUY_OWN: '不能购买自己上架的东西',
       ALREADY_SOLD: '该商品已被买走',
       INVALID_STATE: '当前状态无法执行该操作',
+      FORBIDDEN: '没有权限',
+      NOT_FOUND: '不存在',
       USER_NOT_FOUND: '找不到该用户',
       CANT_GIFT_SELF: '不能转赠给自己',
-      SERVER_ERROR: '服务器出错了',
-      loading: '加载中…',
+      INVALID_INPUT: '请检查填写内容',
+      SERVER_ERROR: '出错了，请重试',
+      invalid_credentials: '邮箱或密码错误',
+      email_taken: '该邮箱已注册',
     },
     en: {
       app_name: 'Buddy Shop',
@@ -86,10 +85,9 @@
       login: 'Log in',
       register: 'Sign up',
       logout: 'Log out',
-      username: 'Username',
+      email: 'Email',
       password: 'Password',
       nickname: 'Nickname',
-      username_login: 'Username',
       market: 'Market',
       sell: 'Sell',
       orders: 'Orders',
@@ -133,40 +131,41 @@
       order_paid: 'Paid',
       order_completed: 'Completed',
       order_cancelled: 'Cancelled',
-      registered_bonus: 'Sign-up bonus',
-      gift_to: 'Sent to',
-      gift_from: 'Received from',
-      sell_gain: 'Sold "',
-      buy_spend: 'Bought "',
       confirm_buy: 'Buy "{title}"?',
       confirm_delete: 'Delete "{title}"?',
-      AUTH_REQUIRED: 'Please log in first',
-      INVALID_CREDENTIALS: 'Wrong username or password',
-      USERNAME_TAKEN: 'Username already taken',
-      INVALID_INPUT: 'Please check your input',
-      NOT_FOUND: 'Not found',
-      FORBIDDEN: 'No permission',
+      check_email: 'Signed up! Check your email to confirm, then log in.',
+      login_first: 'Please log in first',
+      published: 'Published!',
+      purchased: 'Purchased!',
+      gifted: 'Sent!',
+      deleted: 'Deleted',
+      done: 'Done',
       INSUFFICIENT_POINTS: 'Not enough points',
       CANT_BUY_OWN: "You can't buy your own listing",
       ALREADY_SOLD: 'Already sold',
       INVALID_STATE: "Can't do that in this state",
+      FORBIDDEN: 'No permission',
+      NOT_FOUND: 'Not found',
       USER_NOT_FOUND: 'User not found',
       CANT_GIFT_SELF: "Can't send points to yourself",
-      SERVER_ERROR: 'Server error',
-      loading: 'Loading…',
+      INVALID_INPUT: 'Please check your input',
+      SERVER_ERROR: 'Something went wrong',
+      invalid_credentials: 'Wrong email or password',
+      email_taken: 'Email already registered',
     },
   };
 
   const state = {
-    token: localStorage.getItem('cs_token') || '',
-    user: null,
+    supabase: null,
+    user: null,        // auth 用户
+    profile: null,     // 我的资料（昵称、积分）
+    profiles: [],      // 所有用户资料
+    items: [],         // 所有商品
+    orders: [],        // 我的订单
+    txs: [],           // 我的积分流水
     lang: localStorage.getItem('cs_lang') || 'zh',
     page: 'market',
-    items: [],
-    orders: [],
     orderTab: 'bought',
-    users: [],
-    txs: [],
   };
 
   const $ = (sel) => document.querySelector(sel);
@@ -177,33 +176,32 @@
     if (vars) for (const k in vars) s = s.replace('{' + k + '}', vars[k]);
     return s;
   };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  // ---------------- API ----------------
-  async function api(method, path, body) {
-    const opts = { method, headers: {} };
-    if (state.token) opts.headers['Authorization'] = 'Bearer ' + state.token;
-    if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
-    const res = await fetch(path, opts);
-    let data = {};
-    try { data = await res.json(); } catch (e) {}
-    if (!data.ok) {
-      const err = new Error(t(data.error || 'SERVER_ERROR'));
-      err.code = data.error;
-      throw err;
-    }
-    return data;
-  }
-
+  // ---------------- Toast ----------------
   function toast(msg) {
     const el = $('#toast');
     el.textContent = msg;
     el.classList.remove('hidden');
     clearTimeout(toast._t);
-    toast._t = setTimeout(() => el.classList.add('hidden'), 2200);
+    toast._t = setTimeout(() => el.classList.add('hidden'), 2400);
   }
 
-  function esc(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // ---------------- 错误映射 ----------------
+  const KNOWN_CODES = ['INSUFFICIENT_POINTS', 'CANT_BUY_OWN', 'ALREADY_SOLD', 'INVALID_STATE', 'FORBIDDEN', 'NOT_FOUND', 'USER_NOT_FOUND', 'CANT_GIFT_SELF', 'INVALID_INPUT'];
+  function errCode(err) {
+    const m = (err && (err.message || err.error_description || err.msg)) || '';
+    for (const c of KNOWN_CODES) if (m.indexOf(c) >= 0) return c;
+    return null;
+  }
+  function authErrCode(err) {
+    const m = (err && err.message) || '';
+    if (/invalid login/i.test(m)) return 'invalid_credentials';
+    if (/already registered|already been registered/i.test(m)) return 'email_taken';
+    return null;
+  }
+  function showErr(err) {
+    toast(t(errCode(err) || authErrCode(err) || 'SERVER_ERROR'));
   }
 
   // ---------------- 渲染 ----------------
@@ -220,113 +218,95 @@
     if (item.price_type === 'money') return `<span class="badge money">💴 ¥${Number(item.price_money).toFixed(2)}</span>`;
     return `<span class="badge reward">🎁 ${esc(item.reward_text)}</span>`;
   }
-
-  function orderStatusLabel(s) {
-    return t('order_' + s) || s;
+  function orderStatusLabel(s) { return t('order_' + s) || s; }
+  function nick(id) {
+    const p = state.profiles.find((x) => x.id === id);
+    return p ? p.nickname : '?';
   }
 
   function renderMarket() {
     const list = $('#market-list');
     const active = state.items.filter((i) => i.status === 'active');
     $('#market-empty').classList.toggle('hidden', active.length > 0);
-    if (active.length === 0) {
-      $('#market-empty').textContent = t('empty_market');
-      list.innerHTML = '';
-      return;
-    }
-    list.innerHTML = active.map((i) => `
+    if (active.length === 0) { $('#market-empty').textContent = t('empty_market'); list.innerHTML = ''; return; }
+    list.innerHTML = active.map((i) => {
+      const mine = state.user && i.seller_id === state.user.id;
+      return `
       <div class="card item-card">
         <div class="item-title">${esc(i.title)}</div>
         ${i.description ? `<div class="item-desc">${esc(i.description)}</div>` : ''}
         <div class="item-meta">
           ${priceBadge(i)}
-          <span class="seller-name">${t('seller')} · ${esc(i.seller_name)}</span>
+          <span class="seller-name">${t('seller')} · ${esc(nick(i.seller_id))}</span>
         </div>
         <div class="action-row">
-          ${i.is_mine
-            ? `<span class="badge own">${t('my_own')}</span>`
-            : `<button class="btn btn-sm" data-buy="${i.id}">${t('buy')}</button>`}
+          ${mine ? `<span class="badge own">${t('my_own')}</span>` : `<button class="btn btn-sm" data-buy="${i.id}">${t('buy')}</button>`}
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
     $$('[data-buy]').forEach((b) => b.addEventListener('click', () => buyItem(Number(b.dataset.buy))));
   }
 
   function renderMyItems() {
     const list = $('#my-items-list');
-    if (state.items.length === 0) {
-      list.innerHTML = `<div class="empty">${t('empty_items')}</div>`;
-      return;
-    }
-    list.innerHTML = state.items.map((i) => `
+    const mine = state.items.filter((i) => state.user && i.seller_id === state.user.id);
+    if (mine.length === 0) { list.innerHTML = `<div class="empty">${t('empty_items')}</div>`; return; }
+    list.innerHTML = mine.map((i) => `
       <div class="card item-card">
         <div class="item-title">${esc(i.title)} ${i.status === 'sold' ? `<span class="badge own">${t('sold')}</span>` : `<span class="badge points">${t('active')}</span>`}</div>
         <div class="item-meta">${priceBadge(i)}</div>
-        <div class="action-row">
-          <button class="btn btn-sm btn-danger" data-del="${i.id}">${t('delete')}</button>
-        </div>
-      </div>
-    `).join('');
+        <div class="action-row"><button class="btn btn-sm btn-danger" data-del="${i.id}">${t('delete')}</button></div>
+      </div>`).join('');
     $$('[data-del]').forEach((b) => b.addEventListener('click', () => deleteItem(Number(b.dataset.del))));
   }
 
   function renderOrders() {
     const list = $('#orders-list');
-    const filtered = state.orders.filter((o) => (state.orderTab === 'bought' ? o.role === 'buyer' : o.role === 'seller'));
+    const filtered = state.orders.filter((o) => (state.orderTab === 'bought' ? o.buyer_id === state.user.id : o.seller_id === state.user.id));
     $('#orders-empty').classList.toggle('hidden', filtered.length > 0);
-    if (filtered.length === 0) {
-      $('#orders-empty').textContent = t('empty_orders');
-      list.innerHTML = '';
-      return;
-    }
+    if (filtered.length === 0) { $('#orders-empty').textContent = t('empty_orders'); list.innerHTML = ''; return; }
+    const itemTitle = {};
+    state.items.forEach((i) => { itemTitle[i.id] = i.title; });
     list.innerHTML = filtered.map((o) => {
       const amount = o.price_type === 'points' ? `🪙 ${o.amount_points}` : (o.price_type === 'money' ? `💴 ¥${Number(o.amount_money).toFixed(2)}` : `🎁 ${esc(o.reward_text)}`);
-      const counterpart = o.role === 'buyer' ? `${t('seller')} · ${esc(o.seller_name)}` : `${t('buyer')} · ${esc(o.buyer_name)}`;
+      const isBuyer = o.buyer_id === state.user.id;
+      const counterpart = isBuyer ? `${t('seller')} · ${esc(nick(o.seller_id))}` : `${t('buyer')} · ${esc(nick(o.buyer_id))}`;
       const actions = [];
       if (o.status === 'pending') {
-        if (o.role === 'buyer' && o.price_type === 'money') actions.push(`<button class="btn btn-sm" data-act="pay" data-id="${o.id}">${t('pay')}</button>`);
+        if (isBuyer && o.price_type === 'money') actions.push(`<button class="btn btn-sm" data-act="pay" data-id="${o.id}">${t('pay')}</button>`);
         if (o.price_type === 'reward') actions.push(`<button class="btn btn-sm green" data-act="complete" data-id="${o.id}">${t('complete')}</button>`);
         actions.push(`<button class="btn btn-sm ghost" data-act="cancel" data-id="${o.id}">${t('cancel')}</button>`);
-      } else if (o.status === 'paid' && o.role === 'seller') {
+      } else if (o.status === 'paid' && !isBuyer) {
         actions.push(`<button class="btn btn-sm green" data-act="complete" data-id="${o.id}">${t('complete')}</button>`);
         actions.push(`<button class="btn btn-sm ghost" data-act="cancel" data-id="${o.id}">${t('cancel')}</button>`);
       }
       return `
-        <div class="card order-item">
-          <div class="order-title">${esc(o.item_title)}</div>
-          <div class="order-meta">${counterpart}</div>
-          <div class="order-meta">${t('price_type')}: ${amount}</div>
-          <div class="order-meta">${new Date(o.created_at).toLocaleString()} · <span class="tag-status status-${o.status}">${orderStatusLabel(o.status)}</span></div>
-          ${actions.length ? `<div class="action-row">${actions.join('')}</div>` : ''}
-        </div>
-      `;
+      <div class="card order-item">
+        <div class="order-title">${esc(itemTitle[o.item_id] || '?')}</div>
+        <div class="order-meta">${counterpart}</div>
+        <div class="order-meta">${t('price_type')}: ${amount}</div>
+        <div class="order-meta">${new Date(o.created_at).toLocaleString()} · <span class="tag-status status-${o.status}">${orderStatusLabel(o.status)}</span></div>
+        ${actions.length ? `<div class="action-row">${actions.join('')}</div>` : ''}
+      </div>`;
     }).join('');
     $$('[data-act]').forEach((b) => b.addEventListener('click', () => orderAction(b.dataset.act, Number(b.dataset.id))));
   }
 
   function renderPoints() {
-    $('#balance-big').textContent = state.user ? state.user.points : 0;
-    $('#my-points').textContent = '🪙 ' + (state.user ? state.user.points : 0);
-    // 转赠下拉
+    const pts = state.profile ? state.profile.points : 0;
+    $('#balance-big').textContent = pts;
+    $('#my-points').textContent = '🪙 ' + pts;
     const sel = $('#gift-user');
-    const others = state.users.filter((u) => u.id !== state.user.id);
-    sel.innerHTML = others.map((u) => `<option value="${esc(u.username)}">${esc(u.nickname)}（${esc(u.username)}）</option>`).join('');
+    const others = state.profiles.filter((p) => state.user && p.id !== state.user.id);
+    sel.innerHTML = others.map((p) => `<option value="${esc(p.id)}">${esc(p.nickname)}</option>`).join('');
     if (others.length === 0) sel.innerHTML = '<option value="" disabled>—</option>';
-    // 积分记录
     const list = $('#tx-list');
-    if (state.txs.length === 0) {
-      list.innerHTML = `<div class="empty">${t('empty_tx')}</div>`;
-      return;
-    }
+    if (state.txs.length === 0) { list.innerHTML = `<div class="empty">${t('empty_tx')}</div>`; return; }
     list.innerHTML = state.txs.map((tx) => `
       <div class="card tx-item">
-        <div>
-          <div class="tx-reason">${esc(tx.reason)}</div>
-          <div class="tx-time">${new Date(tx.created_at).toLocaleString()}</div>
-        </div>
+        <div><div class="tx-reason">${esc(tx.reason)}</div><div class="tx-time">${new Date(tx.created_at).toLocaleString()}</div></div>
         <div class="tx-delta ${tx.delta >= 0 ? 'plus' : 'minus'}">${tx.delta >= 0 ? '+' : ''}${tx.delta}</div>
-      </div>
-    `).join('');
+      </div>`).join('');
   }
 
   function switchPage(page) {
@@ -334,10 +314,7 @@
     $$('.page').forEach((p) => p.classList.add('hidden'));
     $('#page-' + page).classList.remove('hidden');
     $$('.tab').forEach((tb) => tb.classList.toggle('active', tb.dataset.page === page));
-    if (page === 'points') refreshUsers();
-    if (page === 'market') refreshAll();
-    if (page === 'orders') refreshAll();
-    if (page === 'sell') refreshAll();
+    refreshAll();
   }
 
   function showApp(show) {
@@ -345,32 +322,34 @@
     $('#view-app').classList.toggle('hidden', !show);
   }
 
-  // ---------------- 数据刷新 ----------------
+  // ---------------- 数据 ----------------
   async function refreshAll() {
+    if (!state.user) return;
+    const s = state.supabase;
     try {
-      const me = await api('GET', '/api/me');
-      state.user = me.user;
-      const d1 = await api('GET', '/api/items');
-      state.items = d1.items;
-      const d2 = await api('GET', '/api/orders');
-      state.orders = d2.orders;
-      const d3 = await api('GET', '/api/points/history');
-      state.txs = d3.txs;
+      const [profiles, items, orders, txs] = await Promise.all([
+        s.from('profiles').select('id, nickname, points'),
+        s.from('items').select('*').order('id', { ascending: false }),
+        s.from('orders').select('*').order('id', { ascending: false }),
+        s.from('point_txs').select('*').eq('user_id', state.user.id).order('id', { ascending: false }).limit(100),
+      ]);
+      if (profiles.error) throw profiles.error;
+      if (items.error) throw items.error;
+      if (orders.error) throw orders.error;
+      if (txs.error) throw txs.error;
+      state.profiles = profiles.data || [];
+      state.items = items.data || [];
+      state.orders = orders.data || [];
+      state.txs = txs.data || [];
+      const me = state.profiles.find((p) => p.id === state.user.id);
+      state.profile = me || { nickname: state.user.user_metadata?.nickname || '', points: 0 };
       renderMarket();
       renderMyItems();
       renderOrders();
       renderPoints();
     } catch (e) {
-      if (e.code === 'AUTH_REQUIRED') { logout(false); } else toast(e.message);
+      if (errCode(e) === 'AUTH') { /* ignore */ } else { /* 静默 */ }
     }
-  }
-
-  async function refreshUsers() {
-    try {
-      const d = await api('GET', '/api/users');
-      state.users = d.users;
-      renderPoints();
-    } catch (e) { /* ignore */ }
   }
 
   // ---------------- 操作 ----------------
@@ -378,104 +357,97 @@
     const item = state.items.find((i) => i.id === id);
     if (!item) return;
     if (!confirm(tt('confirm_buy', { title: item.title }))) return;
-    try {
-      await api('POST', '/api/items/' + id + '/buy');
-      toast(state.lang === 'zh' ? '购买成功！' : 'Purchased!');
-      refreshAll();
-    } catch (e) { toast(e.message); }
+    const { error } = await state.supabase.rpc('buy_item', { p_item_id: id });
+    if (error) { showErr(error); return; }
+    toast(t('purchased'));
+    refreshAll();
   }
-
   async function deleteItem(id) {
     const item = state.items.find((i) => i.id === id);
     if (!confirm(tt('confirm_delete', { title: item ? item.title : '' }))) return;
-    try {
-      await api('DELETE', '/api/items/' + id);
-      toast(state.lang === 'zh' ? '已删除' : 'Deleted');
-      refreshAll();
-    } catch (e) { toast(e.message); }
+    const { error } = await state.supabase.from('items').delete().eq('id', id);
+    if (error) { showErr(error); return; }
+    toast(t('deleted'));
+    refreshAll();
   }
-
   async function orderAction(action, id) {
-    try {
-      await api('POST', '/api/orders/' + id + '/' + action);
-      toast(state.lang === 'zh' ? '操作成功' : 'Done');
-      refreshAll();
-    } catch (e) { toast(e.message); }
+    const { error } = await state.supabase.rpc('order_action', { p_order_id: id, p_action: action });
+    if (error) { showErr(error); return; }
+    toast(t('done'));
+    refreshAll();
   }
-
-  async function handleLogin(e) {
-    e.preventDefault();
-    const username = $('#login-username').value.trim();
-    const password = $('#login-password').value;
-    try {
-      const d = await api('POST', '/api/login', { username, password });
-      state.token = d.token; state.user = d.user;
-      localStorage.setItem('cs_token', d.token);
-      enterApp();
-    } catch (err) { toast(err.message); }
-  }
-
-  async function handleRegister(e) {
-    e.preventDefault();
-    const username = $('#reg-username').value.trim();
-    const password = $('#reg-password').value;
-    const nickname = $('#reg-nickname').value.trim();
-    try {
-      const d = await api('POST', '/api/register', { username, password, nickname });
-      state.token = d.token; state.user = d.user;
-      localStorage.setItem('cs_token', d.token);
-      enterApp();
-    } catch (err) { toast(err.message); }
-  }
-
   async function handleSell(e) {
     e.preventDefault();
     const priceType = document.querySelector('input[name="price_type"]:checked').value;
     const body = {
+      seller_id: state.user.id,
       title: $('#sell-title').value.trim(),
       description: $('#sell-desc').value.trim(),
       price_type: priceType,
+      price_points: 0, price_money: 0, reward_text: '',
     };
     if (priceType === 'points') body.price_points = Number($('#sell-points').value);
     else if (priceType === 'money') body.price_money = Number($('#sell-money').value);
     else body.reward_text = $('#sell-reward').value.trim();
-    try {
-      await api('POST', '/api/items', body);
-      toast(state.lang === 'zh' ? '上架成功！' : 'Published!');
-      e.target.reset();
-      $('#field-points').classList.remove('hidden');
-      $('#field-money').classList.add('hidden');
-      $('#field-reward').classList.add('hidden');
-      refreshAll();
-      switchPage('market');
-    } catch (err) { toast(err.message); }
+    const { error } = await state.supabase.from('items').insert(body);
+    if (error) { showErr(error); return; }
+    toast(t('published'));
+    e.target.reset();
+    $('#field-points').classList.remove('hidden');
+    $('#field-money').classList.add('hidden');
+    $('#field-reward').classList.add('hidden');
+    refreshAll();
+    switchPage('market');
   }
-
   async function handleGift(e) {
     e.preventDefault();
-    const to_username = $('#gift-user').value;
+    const to_id = $('#gift-user').value;
     const amount = Number($('#gift-amount').value);
-    try {
-      await api('POST', '/api/points/gift', { to_username, amount });
-      toast(state.lang === 'zh' ? '转赠成功！' : 'Sent!');
-      refreshAll(); refreshUsers();
-    } catch (err) { toast(err.message); }
+    if (!to_id) return;
+    const { error } = await state.supabase.rpc('gift_points', { p_to_id: to_id, p_amount: amount });
+    if (error) { showErr(error); return; }
+    toast(t('gifted'));
+    refreshAll();
   }
 
-  function logout(toastMsg = true) {
-    if (state.token) api('POST', '/api/logout').catch(() => {});
-    state.token = ''; state.user = null;
-    localStorage.removeItem('cs_token');
+  // ---------------- 认证 ----------------
+  async function handleLogin(e) {
+    e.preventDefault();
+    const email = $('#login-email').value.trim();
+    const password = $('#login-password').value;
+    const { data, error } = await state.supabase.auth.signInWithPassword({ email, password });
+    if (error) { toast(t(authErrCode(error) || 'invalid_credentials')); return; }
+    state.user = data.user;
+    enterApp();
+  }
+  async function handleRegister(e) {
+    e.preventDefault();
+    const nickname = $('#reg-nickname').value.trim();
+    const email = $('#reg-email').value.trim();
+    const password = $('#reg-password').value;
+    const { data, error } = await state.supabase.auth.signUp({
+      email, password,
+      options: { data: { nickname: nickname || email.split('@')[0] } },
+    });
+    if (error) { toast(t(authErrCode(error) || 'SERVER_ERROR')); return; }
+    if (!data.session) {
+      toast(t('check_email'));
+      $('#tab-login').click();
+      return;
+    }
+    state.user = data.user;
+    enterApp();
+  }
+  async function logout() {
+    await state.supabase.auth.signOut().catch(() => {});
+    state.user = null; state.profile = null;
     showApp(false);
-    if (toastMsg) toast(state.lang === 'zh' ? '已退出登录' : 'Logged out');
   }
-
   function enterApp() {
     showApp(true);
     switchPage('market');
     refreshAll();
   }
-
   function toggleLang() {
     state.lang = state.lang === 'zh' ? 'en' : 'zh';
     localStorage.setItem('cs_lang', state.lang);
@@ -497,7 +469,7 @@
     $('#form-register').addEventListener('submit', handleRegister);
     $('#form-sell').addEventListener('submit', handleSell);
     $('#form-gift').addEventListener('submit', handleGift);
-    $('#btn-logout').addEventListener('click', () => logout());
+    $('#btn-logout').addEventListener('click', logout);
     $('#btn-lang').addEventListener('click', toggleLang);
     $('#btn-lang-auth').addEventListener('click', toggleLang);
 
@@ -505,7 +477,6 @@
     $('#tab-bought').addEventListener('click', () => { state.orderTab = 'bought'; $('#tab-bought').classList.add('active'); $('#tab-sold').classList.remove('active'); renderOrders(); });
     $('#tab-sold').addEventListener('click', () => { state.orderTab = 'sold'; $('#tab-sold').classList.add('active'); $('#tab-bought').classList.remove('active'); renderOrders(); });
 
-    // 结算方式切换
     $$('input[name="price_type"]').forEach((r) => r.addEventListener('change', () => {
       const v = r.value;
       $('#field-points').classList.toggle('hidden', v !== 'points');
@@ -515,14 +486,27 @@
   }
 
   // ---------------- 启动 ----------------
-  function init() {
+  async function init() {
+    const cfg = window.SUPABASE_CONFIG;
+    state.supabase = supabase.createClient(cfg.url, cfg.key, {
+      auth: { persistSession: true, autoRefreshToken: true },
+    });
     bind();
     applyI18n();
-    if (state.token) {
-      api('GET', '/api/me').then((d) => { state.user = d.user; enterApp(); }).catch(() => showApp(false));
+
+    const { data: { user } } = await state.supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+    if (user) {
+      state.user = user;
+      enterApp();
     } else {
       showApp(false);
     }
+
+    // 会话变化监听
+    state.supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session) { state.user = session.user; enterApp(); }
+      else if (event === 'SIGNED_OUT') { state.user = null; showApp(false); }
+    });
   }
   init();
 })();
