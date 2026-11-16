@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>好友集市</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- 登录 / 注册 -->
+  <div id="view-auth" class="view hidden">
+    <div class="auth-card">
+      <div class="logo">🛍️</div>
+      <h1 class="auth-title" data-i18n="app_name">好友集市</h1>
+      <p class="auth-sub" data-i18n="auth_sub">朋友之间的小小购物集市</p>
+
+      <div class="auth-tabs">
+        <button id="tab-login" class="auth-tab active" data-i18n="login">登录</button>
+        <button id="tab-register" class="auth-tab" data-i18n="register">注册</button>
+      </div>
+
+      <!-- 登录表单 -->
+      <form id="form-login" class="auth-form">
+        <label data-i18n="username">用户名</label>
+        <input id="login-username" type="text" autocomplete="username" placeholder="用户名">
+        <label data-i18n="password">密码</label>
+        <input id="login-password" type="password" autocomplete="current-password" placeholder="密码">
+        <button type="submit" class="btn btn-primary btn-block" data-i18n="login">登录</button>
+      </form>
+
+      <!-- 注册表单 -->
+      <form id="form-register" class="auth-form hidden">
+        <label data-i18n="nickname">昵称</label>
+        <input id="reg-nickname" type="text" placeholder="例如：宝宝 / 亲爱的">
+        <label data-i18n="username">用户名（登录用）</label>
+        <input id="reg-username" type="text" autocomplete="username" placeholder="字母或数字">
+        <label data-i18n="password">密码（至少 4 位）</label>
+        <input id="reg-password" type="password" autocomplete="new-password" placeholder="密码">
+        <button type="submit" class="btn btn-primary btn-block" data-i18n="register">注册</button>
+      </form>
+
+      <div class="lang-row">
+        <button id="btn-lang-auth" class="btn-ghost">EN / 中文</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 主应用 -->
+  <div id="view-app" class="view hidden">
+    <header class="topbar">
+      <div class="topbar-title">🛍️ <span data-i18n="app_name">好友集市</span></div>
+      <div class="topbar-right">
+        <span id="my-points" class="points-badge">🪙 0</span>
+        <button id="btn-lang" class="btn-ghost">EN</button>
+        <button id="btn-logout" class="btn-ghost" data-i18n="logout">退出</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <!-- 市场 -->
+      <section id="page-market" class="page">
+        <h2 class="page-title" data-i18n="market">小市场</h2>
+        <div id="market-list" class="card-list"></div>
+        <div id="market-empty" class="empty hidden"></div>
+      </section>
+
+      <!-- 上架 -->
+      <section id="page-sell" class="page hidden">
+        <h2 class="page-title" data-i18n="sell">上架新东西</h2>
+        <form id="form-sell" class="card form">
+          <label data-i18n="item_title">标题</label>
+          <input id="sell-title" type="text" maxlength="60" placeholder="例如：一次说走就走的约会">
+
+          <label data-i18n="item_desc">描述（可选）</label>
+          <textarea id="sell-desc" rows="3" maxlength="300" placeholder=""></textarea>
+
+          <label data-i18n="price_type">结算方式</label>
+          <div class="type-picker">
+            <label class="type-opt">
+              <input type="radio" name="price_type" value="points" checked>
+              <span>🪙 <span data-i18n="type_points">积分</span></span>
+            </label>
+            <label class="type-opt">
+              <input type="radio" name="price_type" value="money">
+              <span>💴 <span data-i18n="type_money">真钱</span></span>
+            </label>
+            <label class="type-opt">
+              <input type="radio" name="price_type" value="reward">
+              <span>🎁 <span data-i18n="type_reward">自定义奖励</span></span>
+            </label>
+          </div>
+
+          <div id="field-points">
+            <label data-i18n="price_points">价格（积分）</label>
+            <input id="sell-points" type="number" min="1" step="1" value="10">
+          </div>
+          <div id="field-money" class="hidden">
+            <label data-i18n="price_money">价格（元）</label>
+            <input id="sell-money" type="number" min="0.01" step="0.01" value="10">
+          </div>
+          <div id="field-reward" class="hidden">
+            <label data-i18n="reward_text">奖励内容</label>
+            <input id="sell-reward" type="text" maxlength="100" placeholder="例如：一个抱抱 / 一顿饭 / 洗一次衣服">
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" data-i18n="publish">上架</button>
+        </form>
+
+        <h3 class="sub-title" data-i18n="my_items">我上架的东西</h3>
+        <div id="my-items-list" class="card-list"></div>
+      </section>
+
+      <!-- 订单 -->
+      <section id="page-orders" class="page hidden">
+        <h2 class="page-title" data-i18n="orders">订单</h2>
+        <div class="auth-tabs">
+          <button id="tab-bought" class="auth-tab active" data-i18n="bought">我买到的</button>
+          <button id="tab-sold" class="auth-tab" data-i18n="sold_tab">我卖出的</button>
+        </div>
+        <div id="orders-list" class="card-list"></div>
+        <div id="orders-empty" class="empty hidden"></div>
+      </section>
+
+      <!-- 积分 -->
+      <section id="page-points" class="page hidden">
+        <h2 class="page-title" data-i18n="points">积分</h2>
+        <div class="card balance-card">
+          <div class="balance-num">🪙 <span id="balance-big">0</span></div>
+          <div class="balance-label" data-i18n="my_balance">我的积分</div>
+        </div>
+
+        <form id="form-gift" class="card form">
+          <h3 class="sub-title" data-i18n="gift_points">转赠积分给 TA</h3>
+          <label data-i18n="to_user">转给谁</label>
+          <select id="gift-user"></select>
+          <label data-i18n="amount">数量</label>
+          <input id="gift-amount" type="number" min="1" step="1" value="10">
+          <button type="submit" class="btn btn-primary btn-block" data-i18n="send">转赠</button>
+        </form>
+
+        <h3 class="sub-title" data-i18n="tx_history">积分记录</h3>
+        <div id="tx-list" class="card-list"></div>
+      </section>
+    </main>
+
+    <nav class="tabbar">
+      <button class="tab active" data-page="market">🛍️ <span data-i18n="market">市场</span></button>
+      <button class="tab" data-page="sell">➕ <span data-i18n="sell">上架</span></button>
+      <button class="tab" data-page="orders">📦 <span data-i18n="orders">订单</span></button>
+      <button class="tab" data-page="points">🪙 <span data-i18n="points">积分</span></button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

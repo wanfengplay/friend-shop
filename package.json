@@ -1,0 +1,12 @@
+{
+  "name": "friend-shop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "好友集市（Buddy Shop）—— 朋友之间的购物集市",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
