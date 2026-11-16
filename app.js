@@ -24,6 +24,9 @@
       save: '保存',
       my_orders: '我的订单',
       points_center: '积分中心',
+      pull_refresh: '下拉刷新',
+      release_refresh: '松开刷新',
+      refreshing: '刷新中…',
       bought: '我买到的',
       sold_tab: '我卖出的',
       item_title: '标题',
@@ -143,6 +146,9 @@
       save: 'Save',
       my_orders: 'My orders',
       points_center: 'Points center',
+      pull_refresh: 'Pull to refresh',
+      release_refresh: 'Release to refresh',
+      refreshing: 'Refreshing…',
       bought: 'Bought',
       sold_tab: 'Sold',
       item_title: 'Title',
@@ -879,6 +885,36 @@
     }));
   }
 
+  // ---------------- 下拉刷新 ----------------
+  function initPullToRefresh() {
+    const indicator = $('#pull-indicator');
+    let startY = 0, pulling = false;
+    const reset = () => { indicator.style.height = '0px'; pulling = false; };
+    window.addEventListener('touchstart', (e) => {
+      if (window.scrollY <= 0 && state.user) { startY = e.touches[0].clientY; pulling = true; }
+    }, { passive: true });
+    window.addEventListener('touchmove', (e) => {
+      if (!pulling) return;
+      const dist = e.touches[0].clientY - startY;
+      if (dist > 0 && window.scrollY <= 0) {
+        const h = Math.min(dist * 0.45, 64);
+        indicator.style.height = h + 'px';
+        indicator.textContent = dist > 70 ? t('release_refresh') : t('pull_refresh');
+      }
+    }, { passive: true });
+    window.addEventListener('touchend', () => {
+      if (!pulling) return;
+      const h = parseInt(indicator.style.height || '0', 10);
+      if (h > 45) {
+        indicator.textContent = t('refreshing');
+        indicator.style.height = '52px';
+        refreshAll().finally(() => reset());
+      } else {
+        reset();
+      }
+    }, { passive: true });
+  }
+
   // ---------------- 启动 ----------------
   async function init() {
     const cfg = window.SUPABASE_CONFIG;
@@ -886,6 +922,7 @@
       auth: { persistSession: true, autoRefreshToken: true },
     });
     bind();
+    initPullToRefresh();
     applyI18n();
 
     const { data: { user } } = await state.supabase.auth.getUser().catch(() => ({ data: { user: null } }));

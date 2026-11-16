@@ -242,3 +242,16 @@ textarea { resize: vertical; }
 .avatar-img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
 .avatar-upload-row { display: flex; align-items: center; gap: 12px; margin: 4px 0 8px; }
 .avatar-preview { width: 54px; height: 54px; border-radius: 50%; overflow: hidden; border: 2px solid var(--primary); flex-shrink: 0; }
+
+/* ---------- 下拉刷新 ---------- */
+.pull-indicator {
+  height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: var(--muted);
+  transition: height .2s ease;
+  background: #fdf7f9;
+}
