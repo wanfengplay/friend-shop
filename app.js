@@ -20,6 +20,7 @@
       my: '我的',
       edit_profile: '编辑资料',
       avatar: '头像',
+      upload_avatar: '上传图片',
       save: '保存',
       my_orders: '我的订单',
       points_center: '积分中心',
@@ -138,6 +139,7 @@
       my: 'My',
       edit_profile: 'Edit profile',
       avatar: 'Avatar',
+      upload_avatar: 'Upload image',
       save: 'Save',
       my_orders: 'My orders',
       points_center: 'Points center',
@@ -317,6 +319,12 @@
     const p = state.profiles.find((x) => x.id === id);
     return p ? p.nickname : '?';
   }
+  function avatarHtml(av) {
+    if (av && (av.indexOf('http') === 0 || av.indexOf('/storage/') >= 0)) {
+      return `<img src="${esc(av)}" alt="" class="avatar-img">`;
+    }
+    return esc(av || '😊');
+  }
 
   function renderMarket() {
     const list = $('#market-list');
@@ -423,13 +431,13 @@
     $('#my-points').textContent = '🪙 ' + pts;
     $('#my-points-big').textContent = pts;
     $('#my-nickname').textContent = prof.nickname || '—';
-    $('#my-avatar').textContent = prof.avatar || '😊';
+    $('#my-avatar').innerHTML = avatarHtml(prof.avatar);
     const others = state.profiles.filter((p) => state.user && p.id !== state.user.id);
     const sel = $('#gift-user');
     sel.innerHTML = others.map((p) => `<option value="${esc(p.id)}">${esc(p.nickname)}</option>`).join('');
     if (others.length === 0) sel.innerHTML = '<option value="" disabled>—</option>';
     const gsel = $('#grant-user');
-    gsel.innerHTML = others.map((p) => `<option value="${esc(p.id)}">${esc(p.nickname)}</option>`).join('');
+    gsel.innerHTML = state.profiles.map((p) => `<option value="${esc(p.id)}">${esc(p.nickname)}${state.user && p.id === state.user.id ? '（' + t('me') + '）' : ''}</option>`).join('');
     $('#form-grant').classList.toggle('hidden', !state.isAdmin);
     const list = $('#tx-list');
     if (state.txs.length === 0) { list.innerHTML = `<div class="empty">${t('empty_tx')}</div>`; return; }
@@ -680,8 +688,34 @@
   function openEdit() {
     const prof = state.profile || {};
     $('#edit-nickname').value = prof.nickname || '';
-    renderAvatarPicker(prof.avatar || '😊');
+    state._selAvatar = prof.avatar || '😊';
+    renderAvatarPicker(state._selAvatar);
+    const preview = $('#avatar-preview');
+    if (prof.avatar && (prof.avatar.indexOf('http') === 0 || prof.avatar.indexOf('/storage/') >= 0)) {
+      preview.innerHTML = `<img src="${esc(prof.avatar)}" class="avatar-img">`;
+      preview.classList.remove('hidden');
+    } else {
+      preview.innerHTML = '';
+      preview.classList.add('hidden');
+    }
+    $('#avatar-file').value = '';
     $('#edit-modal').classList.remove('hidden');
+  }
+  async function handleAvatarFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.type.indexOf('image/') !== 0) { toast(t('INVALID_INPUT')); return; }
+    if (file.size > 5 * 1024 * 1024) { toast(t('INVALID_INPUT')); return; }
+    const ext = file.type === 'image/png' ? 'png' : (file.type === 'image/gif' ? 'gif' : (file.type === 'image/webp' ? 'webp' : 'jpg'));
+    const path = state.user.id + '.' + ext;
+    const { error } = await state.supabase.storage.from('avatars').upload(path, file, { upsert: true, contentType: file.type });
+    if (error) { showErr(error); return; }
+    const { data } = state.supabase.storage.from('avatars').getPublicUrl(path);
+    state._selAvatar = data.publicUrl;
+    const preview = $('#avatar-preview');
+    preview.innerHTML = `<img src="${esc(data.publicUrl)}" class="avatar-img">`;
+    preview.classList.remove('hidden');
+    $$('#avatar-picker .avatar-opt').forEach((x) => x.classList.remove('sel'));
   }
   function renderAvatarPicker(selected) {
     state._selAvatar = selected;
@@ -824,6 +858,8 @@
     $('#btn-edit-profile').addEventListener('click', openEdit);
     $('#edit-save').addEventListener('click', saveEdit);
     $('#edit-close').addEventListener('click', () => $('#edit-modal').classList.add('hidden'));
+    $('#btn-upload-avatar').addEventListener('click', () => $('#avatar-file').click());
+    $('#avatar-file').addEventListener('change', handleAvatarFile);
     $('#chat-send').addEventListener('click', sendMessage);
     $('#chat-close').addEventListener('click', closeChat);
     $('#chat-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendMessage(); });

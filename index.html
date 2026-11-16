@@ -205,6 +205,11 @@
       <div class="edit-body">
         <label data-i18n="avatar">头像</label>
         <div id="avatar-picker" class="avatar-picker"></div>
+        <div class="avatar-upload-row">
+          <button type="button" id="btn-upload-avatar" class="btn btn-sm ghost" data-i18n="upload_avatar">上传图片</button>
+          <input type="file" id="avatar-file" accept="image/*" class="hidden">
+          <div id="avatar-preview" class="avatar-preview hidden"></div>
+        </div>
         <label data-i18n="nickname">昵称</label>
         <input id="edit-nickname" type="text" maxlength="20">
         <button id="edit-save" class="btn btn-primary btn-block" data-i18n="save">保存</button>

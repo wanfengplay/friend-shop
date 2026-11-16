@@ -1,10 +1,7 @@
-// 好友集市 - 离线缓存 Service Worker
-const CACHE = 'friend-shop-v2';
-const ASSETS = ['./', './index.html', './style.css', './app.js', './config.js', './manifest.json', './icon-192.png', './icon-512.png'];
+// 好友集市 - Service Worker（网络优先，保证更新及时）
+const CACHE = 'friend-shop-v3';
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
-});
+self.addEventListener('install', (e) => { self.skipWaiting(); });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
@@ -16,9 +13,9 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
-    caches.match(e.request).then((cached) => cached || fetch(e.request).then((res) => {
+    fetch(e.request).then((res) => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then((c) => c.put(e.request, copy)); }
       return res;
-    }).catch(() => caches.match('./index.html')))
+    }).catch(() => caches.match(e.request).then((cached) => cached || caches.match('./index.html')))
   );
 });
