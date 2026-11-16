@@ -221,3 +221,37 @@ alter table public.wishes enable row level security;
 create policy "wishes_read" on public.wishes for select using (auth.role() = 'authenticated');
 create policy "wishes_insert" on public.wishes for insert with check (user_id = auth.uid());
 create policy "wishes_delete" on public.wishes for delete using (user_id = auth.uid());
+
+-- ============================================================
+-- 更新：下架状态 + 评论
+-- ============================================================
+alter table public.items drop constraint if exists items_status_check;
+alter table public.items add constraint items_status_check check (status in ('active','sold','delisted'));
+
+create table if not exists public.comments (
+  id bigint generated always as identity primary key,
+  item_id bigint not null references public.items(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  content text not null,
+  created_at timestamptz not null default now()
+);
+alter table public.comments enable row level security;
+create policy "comments_read" on public.comments for select using (auth.role() = 'authenticated');
+create policy "comments_insert" on public.comments for insert with check (user_id = auth.uid());
+create policy "comments_delete" on public.comments for delete using (user_id = auth.uid());
+
+create or replace function public.set_item_status(p_item_id bigint, p_status text)
+returns void language plpgsql security definer set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_item items%rowtype;
+begin
+  select * into v_item from items where id = p_item_id for update;
+  if not found then raise exception 'NOT_FOUND'; end if;
+  if v_item.seller_id <> v_uid then raise exception 'FORBIDDEN'; end if;
+  if p_status not in ('active','delisted') then raise exception 'INVALID_INPUT'; end if;
+  if p_status = 'delisted' and v_item.status = 'sold' then raise exception 'INVALID_STATE'; end if;
+  update items set status = p_status where id = p_item_id;
+end;
+$$;

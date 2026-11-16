@@ -54,6 +54,14 @@
       cancel: '取消',
       sold: '已卖出',
       active: '在售',
+      delisted: '已下架',
+      delist: '下架',
+      relist: '重新上架',
+      comments: '评论',
+      add_comment: '发表评论',
+      comment_ph: '说点什么…',
+      send_comment: '发送',
+      empty_comments: '还没有评论',
       price_points_short: '积分',
       price_money_short: '元',
       seller: '卖家',
@@ -135,6 +143,14 @@
       cancel: 'Cancel',
       sold: 'Sold',
       active: 'Active',
+      delisted: 'Delisted',
+      delist: 'Delist',
+      relist: 'Relist',
+      comments: 'Comments',
+      add_comment: 'Add comment',
+      comment_ph: 'Say something…',
+      send_comment: 'Send',
+      empty_comments: 'No comments yet',
       price_points_short: 'pts',
       price_money_short: '¥',
       seller: 'Seller',
@@ -176,6 +192,8 @@
     orders: [],        // 我的订单
     txs: [],           // 我的积分流水
     wishes: [],        // 期望清单
+    comments: [],      // 评论
+    commentOpenId: null, // 当前展开评论的商品 id
     lang: localStorage.getItem('cs_lang') || 'zh',
     page: 'market',
     orderTab: 'bought',
@@ -244,6 +262,8 @@
     if (active.length === 0) { $('#market-empty').textContent = t('empty_market'); list.innerHTML = ''; return; }
     list.innerHTML = active.map((i) => {
       const mine = state.user && i.seller_id === state.user.id;
+      const itemComments = state.comments.filter((c) => c.item_id === i.id);
+      const open = state.commentOpenId === i.id;
       return `
       <div class="card item-card">
         <div class="item-title">${esc(i.title)}</div>
@@ -254,23 +274,49 @@
         </div>
         <div class="action-row">
           ${mine ? `<span class="badge own">${t('my_own')}</span>` : `<button class="btn btn-sm" data-buy="${i.id}">${t('buy')}</button>`}
+          <button class="btn btn-sm ghost" data-comment-toggle="${i.id}">💬 ${itemComments.length}</button>
         </div>
+        ${open ? `
+        <div class="comment-box">
+          ${itemComments.length === 0 ? `<div class="empty">${t('empty_comments')}</div>` : itemComments.map((c) => {
+            const mineC = state.user && c.user_id === state.user.id;
+            return `<div class="comment-item">
+              <div class="comment-head"><span class="comment-nick">${esc(nick(c.user_id))}</span><span class="comment-time">${new Date(c.created_at).toLocaleString()}</span>${mineC ? `<button class="btn btn-sm btn-danger" data-delcomment="${c.id}">${t('delete')}</button>` : ''}</div>
+              <div class="comment-content">${esc(c.content)}</div>
+            </div>`;
+          }).join('')}
+          <div class="comment-input-row">
+            <input id="comment-input-${i.id}" type="text" maxlength="200" placeholder="${t('comment_ph')}">
+            <button class="btn btn-sm" data-addcomment="${i.id}">${t('send_comment')}</button>
+          </div>
+        </div>` : ''}
       </div>`;
     }).join('');
     $$('[data-buy]').forEach((b) => b.addEventListener('click', () => buyItem(Number(b.dataset.buy))));
+    $$('[data-comment-toggle]').forEach((b) => b.addEventListener('click', () => toggleComments(Number(b.dataset.commentToggle))));
+    $$('[data-addcomment]').forEach((b) => b.addEventListener('click', () => addComment(Number(b.dataset.addcomment))));
+    $$('[data-delcomment]').forEach((b) => b.addEventListener('click', () => deleteComment(Number(b.dataset.delcomment))));
   }
 
   function renderMyItems() {
     const list = $('#my-items-list');
     const mine = state.items.filter((i) => state.user && i.seller_id === state.user.id);
     if (mine.length === 0) { list.innerHTML = `<div class="empty">${t('empty_items')}</div>`; return; }
-    list.innerHTML = mine.map((i) => `
+    list.innerHTML = mine.map((i) => {
+      const statusBadge = i.status === 'sold' ? `<span class="badge own">${t('sold')}</span>` : (i.status === 'delisted' ? `<span class="badge own">${t('delisted')}</span>` : `<span class="badge points">${t('active')}</span>`);
+      const actions = [];
+      if (i.status === 'active') actions.push(`<button class="btn btn-sm ghost" data-setstatus="${i.id}" data-status="delisted">${t('delist')}</button>`);
+      if (i.status === 'delisted') actions.push(`<button class="btn btn-sm green" data-setstatus="${i.id}" data-status="active">${t('relist')}</button>`);
+      actions.push(`<button class="btn btn-sm btn-danger" data-del="${i.id}">${t('delete')}</button>`);
+      return `
       <div class="card item-card">
-        <div class="item-title">${esc(i.title)} ${i.status === 'sold' ? `<span class="badge own">${t('sold')}</span>` : `<span class="badge points">${t('active')}</span>`}</div>
+        <div class="item-title">${esc(i.title)} ${statusBadge}</div>
         <div class="item-meta">${priceBadge(i)}</div>
-        <div class="action-row"><button class="btn btn-sm btn-danger" data-del="${i.id}">${t('delete')}</button></div>
-      </div>`).join('');
+        <div class="action-row">${actions.join('')}</div>
+      </div>`;
+    }).join('');
     $$('[data-del]').forEach((b) => b.addEventListener('click', () => deleteItem(Number(b.dataset.del))));
+    $$('[data-setstatus]').forEach((b) => b.addEventListener('click', () => setItemStatus(Number(b.dataset.setstatus), b.dataset.status)));
   }
 
   function renderOrders() {
@@ -358,23 +404,26 @@
     if (!state.user) return;
     const s = state.supabase;
     try {
-      const [profiles, items, orders, txs, wishes] = await Promise.all([
+      const [profiles, items, orders, txs, wishes, comments] = await Promise.all([
         s.from('profiles').select('id, nickname, points'),
         s.from('items').select('*').order('id', { ascending: false }),
         s.from('orders').select('*').order('id', { ascending: false }),
         s.from('point_txs').select('*').eq('user_id', state.user.id).order('id', { ascending: false }).limit(100),
         s.from('wishes').select('*').order('id', { ascending: false }),
+        s.from('comments').select('*').order('id', { ascending: true }),
       ]);
       if (profiles.error) throw profiles.error;
       if (items.error) throw items.error;
       if (orders.error) throw orders.error;
       if (txs.error) throw txs.error;
       if (wishes.error) throw wishes.error;
+      if (comments.error) throw comments.error;
       state.profiles = profiles.data || [];
       state.items = items.data || [];
       state.orders = orders.data || [];
       state.txs = txs.data || [];
       state.wishes = wishes.data || [];
+      state.comments = comments.data || [];
       const me = state.profiles.find((p) => p.id === state.user.id);
       state.profile = me || { nickname: state.user.user_metadata?.nickname || '', points: 0 };
       renderMarket();
@@ -403,6 +452,30 @@
     const { error } = await state.supabase.from('items').delete().eq('id', id);
     if (error) { showErr(error); return; }
     toast(t('deleted'));
+    refreshAll();
+  }
+  async function setItemStatus(id, status) {
+    const { error } = await state.supabase.rpc('set_item_status', { p_item_id: id, p_status: status });
+    if (error) { showErr(error); return; }
+    toast(t('done'));
+    refreshAll();
+  }
+  function toggleComments(id) {
+    state.commentOpenId = state.commentOpenId === id ? null : id;
+    renderMarket();
+  }
+  async function addComment(id) {
+    const input = document.getElementById('comment-input-' + id);
+    const content = input ? input.value.trim() : '';
+    if (!content) return;
+    const { error } = await state.supabase.from('comments').insert({ item_id: id, user_id: state.user.id, content });
+    if (error) { showErr(error); return; }
+    state.commentOpenId = id;
+    refreshAll();
+  }
+  async function deleteComment(id) {
+    const { error } = await state.supabase.from('comments').delete().eq('id', id);
+    if (error) { showErr(error); return; }
     refreshAll();
   }
   async function orderAction(action, id) {
