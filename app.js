@@ -36,6 +36,12 @@
       amount: '数量',
       send: '转赠',
       tx_history: '积分记录',
+      wishes: '期望',
+      wish_hint: '我希望 TA 上架…',
+      add_wish: '添加期望',
+      wish_list: '大家的期望',
+      wish_wants: '想要',
+      empty_wish: '还没有期望，快写下你想要什么吧～',
       empty_market: '还没有东西，快来上架第一件吧～',
       empty_orders: '还没有订单',
       empty_items: '还没上架任何东西',
@@ -111,6 +117,12 @@
       amount: 'Amount',
       send: 'Send',
       tx_history: 'Point history',
+      wishes: 'Wishes',
+      wish_hint: 'I wish my partner would offer…',
+      add_wish: 'Add wish',
+      wish_list: "Everyone's wishes",
+      wish_wants: 'wants',
+      empty_wish: 'No wishes yet — write what you want!',
       empty_market: 'Nothing here yet — list the first thing!',
       empty_orders: 'No orders yet',
       empty_items: 'No listings yet',
@@ -163,6 +175,7 @@
     items: [],         // 所有商品
     orders: [],        // 我的订单
     txs: [],           // 我的积分流水
+    wishes: [],        // 期望清单
     lang: localStorage.getItem('cs_lang') || 'zh',
     page: 'market',
     orderTab: 'bought',
@@ -309,6 +322,24 @@
       </div>`).join('');
   }
 
+  function renderWishes() {
+    const list = $('#wish-list');
+    if (state.wishes.length === 0) {
+      list.innerHTML = `<div class="empty">${t('empty_wish')}</div>`;
+      return;
+    }
+    list.innerHTML = state.wishes.map((w) => {
+      const mine = state.user && w.user_id === state.user.id;
+      return `
+      <div class="card wish-item">
+        <div class="item-title">💝 ${esc(nick(w.user_id))} ${t('wish_wants')}</div>
+        <div class="item-desc">${esc(w.content)}</div>
+        ${mine ? `<div class="action-row"><button class="btn btn-sm btn-danger" data-delwish="${w.id}">${t('delete')}</button></div>` : ''}
+      </div>`;
+    }).join('');
+    $$('[data-delwish]').forEach((b) => b.addEventListener('click', () => deleteWish(Number(b.dataset.delwish))));
+  }
+
   function switchPage(page) {
     state.page = page;
     $$('.page').forEach((p) => p.classList.add('hidden'));
@@ -327,26 +358,30 @@
     if (!state.user) return;
     const s = state.supabase;
     try {
-      const [profiles, items, orders, txs] = await Promise.all([
+      const [profiles, items, orders, txs, wishes] = await Promise.all([
         s.from('profiles').select('id, nickname, points'),
         s.from('items').select('*').order('id', { ascending: false }),
         s.from('orders').select('*').order('id', { ascending: false }),
         s.from('point_txs').select('*').eq('user_id', state.user.id).order('id', { ascending: false }).limit(100),
+        s.from('wishes').select('*').order('id', { ascending: false }),
       ]);
       if (profiles.error) throw profiles.error;
       if (items.error) throw items.error;
       if (orders.error) throw orders.error;
       if (txs.error) throw txs.error;
+      if (wishes.error) throw wishes.error;
       state.profiles = profiles.data || [];
       state.items = items.data || [];
       state.orders = orders.data || [];
       state.txs = txs.data || [];
+      state.wishes = wishes.data || [];
       const me = state.profiles.find((p) => p.id === state.user.id);
       state.profile = me || { nickname: state.user.user_metadata?.nickname || '', points: 0 };
       renderMarket();
       renderMyItems();
       renderOrders();
       renderPoints();
+      renderWishes();
     } catch (e) {
       if (errCode(e) === 'AUTH') { /* ignore */ } else { /* 静默 */ }
     }
@@ -409,6 +444,22 @@
     toast(t('gifted'));
     refreshAll();
   }
+  async function handleWish(e) {
+    e.preventDefault();
+    const content = $('#wish-content').value.trim();
+    if (!content) return;
+    const { error } = await state.supabase.from('wishes').insert({ user_id: state.user.id, content });
+    if (error) { showErr(error); return; }
+    e.target.reset();
+    toast(t('done'));
+    refreshAll();
+  }
+  async function deleteWish(id) {
+    const { error } = await state.supabase.from('wishes').delete().eq('id', id);
+    if (error) { showErr(error); return; }
+    toast(t('deleted'));
+    refreshAll();
+  }
 
   // ---------------- 认证 ----------------
   async function handleLogin(e) {
@@ -452,7 +503,7 @@
     state.lang = state.lang === 'zh' ? 'en' : 'zh';
     localStorage.setItem('cs_lang', state.lang);
     applyI18n();
-    renderMarket(); renderMyItems(); renderOrders(); renderPoints();
+    renderMarket(); renderMyItems(); renderOrders(); renderPoints(); renderWishes();
   }
 
   // ---------------- 事件绑定 ----------------
@@ -469,6 +520,7 @@
     $('#form-register').addEventListener('submit', handleRegister);
     $('#form-sell').addEventListener('submit', handleSell);
     $('#form-gift').addEventListener('submit', handleGift);
+    $('#form-wish').addEventListener('submit', handleWish);
     $('#btn-logout').addEventListener('click', logout);
     $('#btn-lang').addEventListener('click', toggleLang);
     $('#btn-lang-auth').addEventListener('click', toggleLang);

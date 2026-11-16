@@ -110,6 +110,18 @@
         <div id="my-items-list" class="card-list"></div>
       </section>
 
+      <!-- 期望 -->
+      <section id="page-wishes" class="page hidden">
+        <h2 class="page-title" data-i18n="wishes">期望清单</h2>
+        <form id="form-wish" class="card form">
+          <label data-i18n="wish_hint">我希望 TA 上架…</label>
+          <input id="wish-content" type="text" maxlength="100" placeholder="例如：帮我做顿饭 / 陪我打游戏 / 送我一本书">
+          <button type="submit" class="btn btn-primary btn-block" data-i18n="add_wish">添加期望</button>
+        </form>
+        <h3 class="sub-title" data-i18n="wish_list">大家的期望</h3>
+        <div id="wish-list" class="card-list"></div>
+      </section>
+
       <!-- 订单 -->
       <section id="page-orders" class="page hidden">
         <h2 class="page-title" data-i18n="orders">订单</h2>
@@ -146,6 +158,7 @@
     <nav class="tabbar">
       <button class="tab active" data-page="market">🛍️ <span data-i18n="market">市场</span></button>
       <button class="tab" data-page="sell">➕ <span data-i18n="sell">上架</span></button>
+      <button class="tab" data-page="wishes">💝 <span data-i18n="wishes">期望</span></button>
       <button class="tab" data-page="orders">📦 <span data-i18n="orders">订单</span></button>
       <button class="tab" data-page="points">🪙 <span data-i18n="points">积分</span></button>
     </nav>

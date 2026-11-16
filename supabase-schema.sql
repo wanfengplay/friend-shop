@@ -205,3 +205,19 @@ begin
   end if;
 end;
 $$;
+
+-- ============================================================
+-- 期望上架（愿望清单）
+-- ============================================================
+create table if not exists public.wishes (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  content text not null,
+  created_at timestamptz not null default now()
+);
+
+alter table public.wishes enable row level security;
+
+create policy "wishes_read" on public.wishes for select using (auth.role() = 'authenticated');
+create policy "wishes_insert" on public.wishes for insert with check (user_id = auth.uid());
+create policy "wishes_delete" on public.wishes for delete using (user_id = auth.uid());
